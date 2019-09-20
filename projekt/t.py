@@ -1,5 +1,5 @@
 import miniworldmaker as mwm
-
+# Änderungen
 
 class MyBoard(mwm.PixelBoard):
     def on_setup(self):
