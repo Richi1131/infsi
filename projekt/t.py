@@ -149,5 +149,6 @@ class Enemy(mwm.Token):
             return
 
 
+
 my_board = MyBoard(1000, 600)
 my_board.show()
