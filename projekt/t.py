@@ -1,17 +1,43 @@
 import miniworldmaker as mwm
 import time
+import pygame
 
 
 class MyBoard(mwm.PixelBoard):
     def on_setup(self):
         self.add_image("images/backgroundCastles.png")
         self.player = Player((100, 100))
-        Wall((200, 200))
-        DestructibleWall((300, 300))
+        Wall((0, 0))
+        DestructibleWall((50, 0))
         Enemy((400, 400))
+        self.set_room(rooms[0])
+
     def on_key_pressed(self, key):
         if "f11" in key:
             self.reset()
+
+    def load_room(self):
+        for token in self.get_tokens_at_rect((pygame.Rect(0, 0, 1600, 900))):
+            token.remove()
+        for object in self.room.content:
+            for pos in object.positions:
+                object.type((pos[0]*50, pos[1]*50))
+        Player((0, 430))
+
+    def set_room(self, room):
+        self.room = room
+        self.load_room()
+
+
+class Room:
+    def __init__(self, content: list):
+        self.content = content
+
+
+class RoomObject:
+    def __init__(self, type, positions: list):
+        self.type = type
+        self.positions = positions
 
 
 class Player(mwm.Actor):
@@ -72,7 +98,7 @@ class Player(mwm.Actor):
     def act(self):
         self.cool()   # reducing shot cooldown
         # collision (walls and borders)
-        if self.sensing_token(Wall, 100) or self.sensing_borders() != []:
+        if self.sensing_token(Wall, 1) or self.sensing_borders() != []:
             self.move_back()
         # collision with enemies
         if self.sensing_token(Enemy, 1):
@@ -139,6 +165,9 @@ class Bullet(mwm.Token):
 
 
 class Wall(mwm.Token):
+    def __init__(self, pos):
+        super().__init__(pos)
+        self.size = (50, 50)
     def on_setup(self):
         self.add_image("images/wall.png")
 
@@ -167,5 +196,9 @@ class Enemy(mwm.Token):
 def main():
     my_board = MyBoard(1600, 900)
     my_board.show(fullscreen=True)
-    
+
+rooms = [
+    Room([RoomObject(Wall, [(x, 1) for x in range(1, 30)])])
+]
+
 main()
