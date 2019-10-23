@@ -48,7 +48,6 @@ class Room:
             self.content.append(RoomObject(object_class, positions))
 
 
-
 class RoomObject:
     def __init__(self, type, positions: list):
         self.type = type
@@ -183,7 +182,8 @@ class Bullet(mwm.Token):
 class Wall(mwm.Token):
     def __init__(self, pos):
         super().__init__(pos)
-        self.size = (50, 50)
+        self.size = (tile_size, tile_size)
+
     def on_setup(self):
         self.add_image("images/wall.png")
 
@@ -209,25 +209,27 @@ class Enemy(mwm.Token):
             return
 
 
-rooms = list()
+def read_levels():
+    global rooms
+    rooms = list()
+    for i, file in enumerate(os.listdir("maps")):
+        if file.endswith(".png"):
+            rooms.append(Room())
+            data = image.imread(f"maps/{file}")
+            for y, line in enumerate(data):
+                for x, col in enumerate(line):
+                    for key in drawables:
+                        if [round(x, 1) for x in list(col)] == drawables[key]:
+                            rooms[i].add_object(key, [(x * tile_size, y * tile_size)])
 
+
+res = (1600, 900)
+tile_size = res[0]/32
 drawables = {
-    Wall: [0, 0, 0],
-    DestructibleWall: [0, 0.5, 0]
+    Wall: [0, 0, 0, 1],
+    DestructibleWall: [0, 0.5, 0, 1]
 }
 
-for i, file in enumerate(os.listdir("maps")):
-    rooms.append(Room())
-    data = image.imread(f"maps/{file}")
-    for y, line in enumerate(data):
-        for x, col in enumerate(line):
-            for key in drawables:
-                if [round(x, 1) for x in list(col)] == drawables[key]:
-                    rooms[i].add_object(key, [(x*50, y*50)])
-
+read_levels()
 my_board = MyBoard(1600, 900)
 my_board.show(fullscreen=True)
-
-
-
-
