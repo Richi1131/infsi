@@ -1,6 +1,8 @@
 import miniworldmaker as mwm
 import time
 import pygame
+import matplotlib.image as image
+import os
 
 
 class MyBoard(mwm.PixelBoard):
@@ -21,7 +23,7 @@ class MyBoard(mwm.PixelBoard):
             token.remove()
         for object in self.room.content:
             for pos in object.positions:
-                object.type((pos[0]*50, pos[1]*50))
+                object.type(pos)
         Player((0, 430))
 
     def set_room(self, room):
@@ -30,8 +32,21 @@ class MyBoard(mwm.PixelBoard):
 
 
 class Room:
-    def __init__(self, content: list):
-        self.content = content
+    def __init__(self, content=None):
+        if content is None:
+            self.content = list()
+        else:
+            self.content = content
+
+    def add_object(self, object_class, positions: list):
+        for item in self.content:
+            if item.type == object_class:
+                for pos in positions:
+                    item.positions.append(pos)
+                break
+        else:
+            self.content.append(RoomObject(object_class, positions))
+
 
 
 class RoomObject:
@@ -160,7 +175,8 @@ class Bullet(mwm.Token):
                         obj.on_hit(self.damage)
                     except AttributeError:
                         pass
-                    self.remove()                                                             # -> -> removing bullet
+                    self.remove()                                                           # -> -> removing bullet
+                    return
             return
 
 
@@ -191,14 +207,27 @@ class Enemy(mwm.Token):
         if self.hp <= 0:
             self.remove()
             return
-    
 
-def main():
-    my_board = MyBoard(1600, 900)
-    my_board.show(fullscreen=True)
 
-rooms = [
-    Room([RoomObject(Wall, [(x, 1) for x in range(1, 30)])])
-]
+rooms = list()
 
-main()
+drawables = {
+    Wall: [0, 0, 0],
+    DestructibleWall: [0, 0.5, 0]
+}
+
+for i, file in enumerate(os.listdir("maps")):
+    rooms.append(Room())
+    data = image.imread(f"maps/{file}")
+    for y, line in enumerate(data):
+        for x, col in enumerate(line):
+            for key in drawables:
+                if [round(x, 1) for x in list(col)] == drawables[key]:
+                    rooms[i].add_object(key, [(x*50, y*50)])
+
+my_board = MyBoard(1600, 900)
+my_board.show(fullscreen=True)
+
+
+
+
