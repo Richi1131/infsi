@@ -1,0 +1,7 @@
+﻿-Level für das Spiel werden aus den PNGs in diesem Ordner geladen.
+-Größe: 32x18 pixel
+-Jedes Bild braucht mindestens einen (teilweise) durchsichtigen Pixel. (Daher können Level nicht mit MS-Paint gemalt werden.)
+-Pixel, die nicht vollständig durchsichtig sind müssen, gerundet auf die erste Nachkommastelle, einem RGBA-Wert aus dem dict "drawables" entsprechen.
+-Ein Objekt der dem RGBA-Wert im dict zugeordnete Klasse wird beim Laden des Levels an der gegebenen Stelle plaziert.
+-Der RGBA-Wert muss im dict durch 255 geteilt und auf die erste Nachkommastelle gerundet werden. (auch integer brauchen eine Nachkommastelle: [1.0, 0.0, 0.0, 1.0])
+-Alle Level werden bei Programmstart geladen.

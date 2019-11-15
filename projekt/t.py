@@ -8,27 +8,37 @@ import random
 
 class MyBoard(mwm.PixelBoard):
     def on_setup(self):
-        self.add_image("images/backgroundCastles.png")
+        self.add_image("images/background.png")
         Player((100, 100))
         Wall((0, 0))
         DestructibleWall((50, 0))
         Enemy((400, 400))
         self.set_room(rooms[0])
-
-    def on_key_pressed(self, key):
-        if "f11" in key:
-            self.reset()
+        self.level = 0
 
     def load_room(self):
         for token in self.get_tokens_at_rect((pygame.Rect(0, 0, res[0], res[1]))):
             token.remove()
+        self.load_gui()
+        self.enemy_count = 0
         for object in self.room.content:
             for pos in object.positions:
                 object.type(pos)
-
+                if object.type == Enemy:
+                    self.enemy_count += 1
+                
+    def load_gui(self):
+        global coins
+        self.gui_coins = mwm.NumberToken(position=(750,0), font_size=20, color=(0, 0, 0, 255), number = coins)
+        self.gui_health = mwm.NumberToken(position=(800,0), font_size=20, color=(0, 0, 0, 255), number=100)
+        
     def set_room(self, room):
         self.room = room
         self.load_room()
+    
+    def inc_level(self):
+        self.level += 1
+        self.set_room(rooms[self.level])
 
 
 class Room:
@@ -118,9 +128,15 @@ class Player(mwm.Actor):
         # taking damage from enemies
         if self.sensing_token(Enemy, 1):
             self.on_hit(self.sensing_token(Enemy, 1).damage)
-        # collection coins
+        # collecting coins
         if self.sensing_token(Coin, 1):
             self.sensing_token(Coin, 1).remove()
+            global coins
+            coins += 1
+            my_board.gui_coins.inc()
+        # leaving the room
+        if self.sensing_token(Exit, 1):
+            my_board.inc_level()
 
     def on_sensing_wall(self, wall):
         # additional collision to make glitches less common (not perfect)
@@ -130,6 +146,7 @@ class Player(mwm.Actor):
         if self.damage_buffer <= 0:
             self.hp -= damage
             self.damage_buffer = 1
+            my_board.gui_health.set_number(self.hp)
             if self.hp <= 0:
                 self.remove()
                 return
@@ -174,12 +191,12 @@ class Bullet(mwm.Token):
             return
         if len(self.sensing_tokens()) > 1:
             for obj in self.sensing_tokens():
-                if not isinstance(obj, Bullet) and not isinstance(obj, type(self.master)):          # if bullet hits
-                    try:                                                   # -> trying to call on_hit() for target(s)
-                        obj.on_hit(self.damage)
+                if not isinstance(obj, Bullet) and not isinstance(obj, type(self.master)) and not isinstance(obj, Coin):
+                    try:                                                   # ^ if bullet hits
+                        obj.on_hit(self.damage)                            # -> trying to call on_hit() for target(s)
                     except AttributeError:
                         pass
-                    self.remove()                                                           # -> -> removing bullet
+                    self.remove()                                          # -> -> removing bullet
                     return
             return
 
@@ -199,12 +216,29 @@ class DestructibleWall(Wall):
 
     def on_hit(self, damage):
         self.remove()
+        
 
-
-class Door(mwm.Token):
+class ExitLocation(mwm.Token):
     def on_setup(self):
-        self.add_image("")
+        self.add_image("images/empty.png")
 
+    def act(self):
+        if my_board.enemy_count == 0:
+            Exit(self.position)
+            self.remove()
+            
+
+class Exit(mwm.Token):
+    def on_setup(self):
+        self.size = (tile_size[0], tile_size[1])
+        self.add_image("images/exit.png")
+        if self.position[1] == 0:
+            self.direction = 180
+        elif self.position[0] == 0:
+            self.direction = 90
+        elif self.position[0] == 1500:
+            self.direction = -90
+        
 
 class Coin(mwm.Token):
     def on_setup(self):
@@ -232,7 +266,7 @@ class Enemy(mwm.Token):
         self.turn_buffer -= d_time
         if self.move_buffer <= 0:
             self.action = random.randint(0, 9)
-            self.move_buffer = random.randint(2, 9)
+            self.move_buffer = random.randint(5, 9)
         if self.turn_buffer <= 0:
             self.direction = random.randint(-180, 180)
             self.turn_buffer = random.randint(2, 9)
@@ -246,13 +280,16 @@ class Enemy(mwm.Token):
         self.hp -= damage
         if self.hp <= 0:
             self.remove()
+            my_board.enemy_count -= 1
             return
-
+        
 
 def read_levels():
     global rooms
     rooms = list()
-    for file in os.listdir("maps"):
+    folder = os.listdir("maps")
+    folder.sort()
+    for file in folder:
         if file.endswith(".png"):
             rooms.append(Room())
             data = image.imread(f"maps/{file}")
@@ -270,15 +307,19 @@ tile_count_x = 16
 tile_count_y = 9
 tile_size = (100, 100)
 
-
 d_time = 0
+
 drawables = {
     "[0.0, 0.0, 1.0, 1.0]": Player, #rgba(0,0,255,255)
     "[0.0, 0.0, 0.0, 1.0]": Wall, #rgba(0,0,0,255)
     "[0.0, 0.5, 0.0, 1.0]": DestructibleWall, #rgba(0,~127,0,255)
     "[1.0, 0.8, 0.0, 1.0]": Coin, #rgba(255,~200,0,255)
-    "[1.0, 0.0, 0.0, 1.0]": Enemy #rgma(255,0,0,255)
+    "[1.0, 0.0, 0.0, 1.0]": Enemy, #rgma(255,0,0,255)
+    "[0.5, 0.5, 0.0, 1.0]": ExitLocation #rgma(127,127,0,255)
 }
+
+#savedata
+coins = 0
 
 read_levels()
 my_board = MyBoard(res[0], res[1])
