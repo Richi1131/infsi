@@ -11,7 +11,7 @@ class MyBoard(mwm.PixelBoard):
         self.add_image("images/background.png")
         Player((100, 100))
         Wall((0, 0))
-        DestructibleWall((50, 0))
+        DestructibleWall((100, 0))
         Enemy((400, 400))
         self.set_room(rooms[0])
         self.level = 0
@@ -29,13 +29,13 @@ class MyBoard(mwm.PixelBoard):
                 
     def load_gui(self):
         global coins
-        self.gui_coins = mwm.NumberToken(position=(750,0), font_size=20, color=(0, 0, 0, 255), number = coins)
-        self.gui_health = mwm.NumberToken(position=(800,0), font_size=20, color=(0, 0, 0, 255), number=100)
+        self.gui_coins = mwm.NumberToken(position=(750, 0), font_size=20, color=(0, 0, 0, 255), number = coins)
+        self.gui_health = mwm.NumberToken(position=(800, 0), font_size=20, color=(0, 0, 0, 255), number=100)
         
     def set_room(self, room):
         self.room = room
         self.load_room()
-    
+
     def inc_level(self):
         self.level += 1
         self.set_room(rooms[self.level])
@@ -175,7 +175,7 @@ class Player(mwm.Actor):
 class Bullet(mwm.Token):
     def __init__(self, master, direction):
         self.master = master
-        super().__init__((master.position[0]+40, master.position[1]+40))
+        super().__init__(master.position)
         self.direction = direction
         self.speed = master.shot_speed
         self.damage = master.damage
@@ -220,11 +220,12 @@ class DestructibleWall(Wall):
 
 class ExitLocation(mwm.Token):
     def on_setup(self):
+        self.size = (tile_size[0], tile_size[1])
         self.add_image("images/empty.png")
 
     def act(self):
         if my_board.enemy_count == 0:
-            Exit(self.position)
+            Exit((self.position[0]-50, self.position[1]-50))
             self.remove()
             
 
@@ -232,11 +233,11 @@ class Exit(mwm.Token):
     def on_setup(self):
         self.size = (tile_size[0], tile_size[1])
         self.add_image("images/exit.png")
-        if self.position[1] == 0:
+        if self.position[1] <= 50:
             self.direction = 180
-        elif self.position[0] == 0:
+        elif self.position[0] <= 50:
             self.direction = 90
-        elif self.position[0] == 1500:
+        elif self.position[0] >= 1550:
             self.direction = -90
         
 
@@ -244,8 +245,7 @@ class Coin(mwm.Token):
     def on_setup(self):
         self.add_image("images/coin.png")
         self.size = (80, 80)
-        self.center_x += 10
-        self.center_y += 10
+        self.position = (self.position[0]+10, self.position[1]+10)
 
 
 class Enemy(mwm.Token):
@@ -310,12 +310,12 @@ tile_size = (100, 100)
 d_time = 0
 
 drawables = {
-    "[0.0, 0.0, 1.0, 1.0]": Player, #rgba(0,0,255,255)
-    "[0.0, 0.0, 0.0, 1.0]": Wall, #rgba(0,0,0,255)
-    "[0.0, 0.5, 0.0, 1.0]": DestructibleWall, #rgba(0,~127,0,255)
-    "[1.0, 0.8, 0.0, 1.0]": Coin, #rgba(255,~200,0,255)
-    "[1.0, 0.0, 0.0, 1.0]": Enemy, #rgma(255,0,0,255)
-    "[0.5, 0.5, 0.0, 1.0]": ExitLocation #rgma(127,127,0,255)
+    "[0.0, 0.0, 1.0, 1.0]": Player,                 # RGBA(0,0,255,255)
+    "[0.0, 0.0, 0.0, 1.0]": Wall,                   # RGBA(0,0,0,255)
+    "[0.0, 0.5, 0.0, 1.0]": DestructibleWall,       # RGBA(0,~127,0,255)
+    "[1.0, 0.8, 0.0, 1.0]": Coin,                   # RGBA(255,~200,0,255)
+    "[1.0, 0.0, 0.0, 1.0]": Enemy,                  # RGBA(255,0,0,255)
+    "[0.5, 0.5, 0.0, 1.0]": ExitLocation            # RGBA(127,127,0,255)
 }
 
 #savedata
