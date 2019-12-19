@@ -9,7 +9,7 @@ import random
 class MyBoard(mwm.PixelBoard):
     def on_setup(self):
         self.add_image("images/background.png")
-        Player((100, 100))
+        self.player = Player((100, 100))
         Wall((0, 0))
         DestructibleWall((100, 0))
         Enemy((400, 400))
@@ -23,10 +23,13 @@ class MyBoard(mwm.PixelBoard):
         self.enemy_count = 0
         for object in self.room.content:
             for pos in object.positions:
-                object.type(pos)
-                if object.type == Enemy:
-                    self.enemy_count += 1
-                
+                if object.type == Player:
+                    self.player = Player(pos)
+                else:
+                    object.type(pos)
+                    if object.type == Enemy:
+                        self.enemy_count += 1
+        
     def load_gui(self):
         global coins
         self.gui_coins = mwm.NumberToken(position=(750, 0), font_size=20, color=(0, 0, 0, 255), number = coins)
@@ -254,27 +257,36 @@ class Enemy(mwm.Token):
         self.size = (80, 80)
         self.hp = 100
         self.damage = 50
-        self.speed = 5
-        self.move_buffer = 0  # time until next movement change (on setup always 0)
-        self.turn_buffer = 0  # time until next direction change (on setup always 0)
+        self.speed = 2
+        self.target_position = None
 
     def act(self):
-        self.random_movement()
+        #self.is_detecting_player()
+        self.move_to_player()
 
-    def random_movement(self):
-        self.move_buffer -= d_time
-        self.turn_buffer -= d_time
-        if self.move_buffer <= 0:
-            self.action = random.randint(0, 9)
-            self.move_buffer = random.randint(5, 9)
-        if self.turn_buffer <= 0:
-            self.direction = random.randint(-180, 180)
-            self.turn_buffer = random.randint(2, 9)
-        if self.sensing_borders() or self.sensing_token(Wall):
-            self.move_back()
-            self.direction = random.randint(-180, 180)
-        if self.action > 0:
-            self.move()
+    def move_to_player(self):
+        dx = my_board.player.position[0] - self.position[0]
+        dy = my_board.player.position[1] - self.position[1]
+        if abs(round(dx, -1)) == abs(round(dy, -1)):
+            if dx > 0 and dy > 0:
+                self.direction = 135
+            elif dx < 0 and dy < 0:
+                self.direction = -45
+            elif dy < 0 < dx:
+                self.direction = 45
+            elif dx < 0 < dy:
+                self.direction = -135
+        elif abs(dx) < abs(dy):
+            if dy < 0:
+                self.direction = 0
+            else:
+                self.direction = 180
+        else:
+            if dx < 0:
+                self.direction = -90
+            else:
+                self.direction = 90
+        self.move()
 
     def on_hit(self, damage):
         self.hp -= damage
@@ -315,7 +327,8 @@ drawables = {
     "[0.0, 0.5, 0.0, 1.0]": DestructibleWall,       # RGBA(0,~127,0,255)
     "[1.0, 0.8, 0.0, 1.0]": Coin,                   # RGBA(255,~200,0,255)
     "[1.0, 0.0, 0.0, 1.0]": Enemy,                  # RGBA(255,0,0,255)
-    "[0.5, 0.5, 0.0, 1.0]": ExitLocation            # RGBA(127,127,0,255)
+    "[0.5, 0.5, 0.0, 1.0]": ExitLocation            # RGBA(~127,~127,0,255)
+    # "[0.0, 0.0, 0.0, 0.0]": NavTile                 # RGBA(0,0,0,0)
 }
 
 #savedata
