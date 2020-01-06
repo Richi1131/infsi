@@ -17,8 +17,7 @@ class MyBoard(mwm.PixelBoard):
         self.level = 0
 
     def load_room(self):
-        for token in self.get_tokens_at_rect((pygame.Rect(0, 0, res[0], res[1]))):
-            token.remove()
+        self.clear()
         self.load_gui()
         self.enemy_count = 0
         for object in self.room.content:
@@ -29,6 +28,10 @@ class MyBoard(mwm.PixelBoard):
                     object.type(pos)
                     if object.type == Enemy:
                         self.enemy_count += 1
+
+    def clear(self):
+        for token in self.get_tokens_at_rect((pygame.Rect(0, 0, res[0], res[1]))):
+            token.remove()
         
     def load_gui(self):
         global coins
@@ -41,7 +44,24 @@ class MyBoard(mwm.PixelBoard):
 
     def inc_level(self):
         self.level += 1
-        self.set_room(rooms[self.level])
+        try:
+            if self.level % 10 == 0:
+                self.set_room(boss_rooms[self.level//10])
+            else:
+                self.set_room(rooms[self.level-self.level//10])
+        except IndexError:
+            self.win()
+
+    def win(self):
+        self.clear()
+        mwm.TextToken(position=(650, 400), font_size=50, color=(0, 0, 0, 255), text="You Win!")
+
+
+    def loose(self):
+        self.clear()
+        mwm.TextToken(position=(650, 400), font_size=50, color=(0, 0, 0, 255), text="You Loose!")
+
+
 
 
 class Room:
@@ -151,7 +171,7 @@ class Player(mwm.Actor):
             self.damage_buffer = 1
             my_board.gui_health.set_number(self.hp)
             if self.hp <= 0:
-                self.remove()
+                my_board.loose()
                 return
 
     def shoot(self, direction):
@@ -297,19 +317,28 @@ class Enemy(mwm.Token):
         
 
 def read_levels():
-    global rooms
+    global rooms, boss_rooms
     rooms = list()
-    folder = os.listdir("maps")
+    path = "maps"
+    build_levels(path, rooms)
+
+    boss_rooms = list()
+    path = "maps/boss"
+    build_levels(path, boss_rooms)
+
+
+def build_levels(path, save_location):
+    folder = os.listdir(path)
     folder.sort()
     for file in folder:
         if file.endswith(".png"):
-            rooms.append(Room())
-            data = image.imread(f"maps/{file}")
+            save_location.append(Room())
+            data = image.imread(f"{path}/{file}")
             for y, line in enumerate(data):
                 for x, col in enumerate(line):
                     col = [round(x, 1) for x in list(col)]
                     try:
-                        rooms[len(rooms)-1].add_object(drawables[str(col)], [(x * tile_size[0], y * tile_size[1])])
+                        save_location[len(save_location)-1].add_object(drawables[str(col)], [(x * tile_size[0], y * tile_size[1])])
                     except KeyError:
                         pass
 
