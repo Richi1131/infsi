@@ -29,12 +29,15 @@ class MyBoard(mwm.PixelBoard):
 
     def load_menu(self):
         self.clear()
+        self.play_music("sounds/music(half).wav")
         self.in_menu = True
         mwm.TextToken(position=(650, 300), font_size=50, color=(0, 0, 0, 255), text="Platzhalter")
         mwm.TextToken(position=(650, 800), font_size=20, color=(0, 0, 0, 255), text="Press SPACEBAR to start")
 
     def load_room(self):
         self.clear()
+        if self.room.is_boss:
+            self.play_music("sounds/music.wav")
         self.in_menu = False
         self.load_gui()
         self.enemy_count = 0
@@ -56,6 +59,7 @@ class MyBoard(mwm.PixelBoard):
         self.gui_coins = mwm.NumberToken(position=(725, 0), font_size=20, color=(0, 0, 0, 255), number=coins)
         self.gui_bombs = mwm.NumberToken(position=(775, 0), font_size=20, color=(0, 0, 0, 255), number=bombs)
         self.gui_health = mwm.NumberToken(position=(825, 0), font_size=20, color=(0, 0, 0, 255), number=100)
+        self.gui_level = mwm.NumberToken(position=(875, 0), font_size=20, color=(0, 0, 0, 255), number=self.level)
         
     def _set_room(self, room):
         self.room = room
@@ -64,7 +68,7 @@ class MyBoard(mwm.PixelBoard):
     def _sync_room_to_level(self):
         try:
             if self.level != 0 and self.level % 10 == 0:
-                self._set_room(boss_rooms[self.level//10])
+                self._set_room(boss_rooms[self.level//10-1])
             else:
                 self._set_room(rooms[self.level-self.level//10])
         except IndexError:
@@ -90,7 +94,8 @@ class MyBoard(mwm.PixelBoard):
 
 
 class Room:
-    def __init__(self, content=None):
+    def __init__(self, content=None, is_boss=False):
+        self.is_boss = is_boss
         if content is None:
             self.content = list()
         else:
@@ -185,10 +190,12 @@ class Player(mwm.Actor):
             self.on_hit(self.sensing_token(Enemy, 1).damage)
         # collecting coins
         if self.sensing_token(Coin, 1):
+            self.board.play_sound("sounds/collect_coin.wav")
             self.sensing_token(Coin, 1).remove()
             global coins
             coins += 1
             my_board.gui_coins.inc()
+        # collecting bombs
         if self.sensing_token(BombItem, 1):
             self.sensing_token(BombItem, 1).remove()
             global bombs
@@ -318,7 +325,8 @@ class BombExploding(mwm.Token):
 
     def act(self):
         if self.explosion_buffer < 0:
-            Explosion((self.position[0]-150, self.position[1]-150))
+            self.board.play_sound("sounds/explosion.wav")
+            Explosion0((self.position[0]-150, self.position[1]-150))
             self.remove()
             return
         else:
@@ -327,20 +335,64 @@ class BombExploding(mwm.Token):
 
 class Explosion(mwm.Token):
     def on_setup(self):
-        self.add_image("images/explosion.png")
         self.size = (300, 300)
-        self.remove_buffer = 0.15
+        self.remove_buffer = 0
+        self.next_exposion = None
+        self.damaging = False
 
     def act(self):
         if self.remove_buffer < 0:
+            try:
+                self.next_exposion((self.position[0]-150, self.position[1]-150))
+            except TypeError:
+                pass
             self.remove()
             return
-        for token in self.sensing_tokens():
-            try:
-                token.on_blast()
-            except AttributeError:
-                pass
+        if self.damaging:
+            for token in self.sensing_tokens():
+                try:
+                    token.on_blast()
+                except AttributeError:
+                    pass
         self.remove_buffer -= d_time
+
+
+class Explosion0(Explosion):
+    def on_setup(self):
+        self.add_image("images/explosion_0.png")
+        self.size = (300, 300)
+        self.remove_buffer = 0.1
+        self.next_exposion = Explosion1
+        self.damaging = True
+
+
+class Explosion1(Explosion):
+    def on_setup(self):
+        self.add_image("images/explosion_1.png")
+        self.size = (300, 300)
+        self.remove_buffer = 0.1
+        self.next_exposion = Explosion2
+        self.damaging = True
+
+
+class Explosion2(Explosion):
+    def on_setup(self):
+        self.add_image("images/explosion_2.png")
+        self.size = (300, 300)
+        self.remove_buffer = 0.5
+        self.next_exposion = Explosion3
+        self.damaging = False
+
+
+class Explosion3(Explosion):
+    def on_setup(self):
+        self.add_image("images/explosion_3.png")
+        self.size = (300, 300)
+        self.remove_buffer = 0.5
+        self.next_exposion = None
+        self.damaging = False
+
+
 
 class Enemy(mwm.Token):
     def on_setup(self):
@@ -411,7 +463,7 @@ def build_levels(path, save_location):
     folder.sort()
     for file in folder:
         if file.endswith(".png"):
-            save_location.append(Room())
+            save_location.append(Room(is_boss=(path == "maps/boss")))
             data = image.imread(f"{path}/{file}")
             for y, line in enumerate(data):
                 for x, col in enumerate(line):
