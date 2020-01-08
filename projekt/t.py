@@ -3,21 +3,39 @@ import time
 import pygame
 import matplotlib.image as image
 import os
+import math
 import random
 
 
 class MyBoard(mwm.PixelBoard):
     def on_setup(self):
         self.add_image("images/background.png")
-        self.player = Player((100, 100))
-        Wall((0, 0))
-        DestructibleWall((100, 0))
-        Enemy((400, 400))
-        self.set_room(rooms[0])
-        self.level = 0
+        self.load_menu()
+        self._last_time = None
+
+    def act(self):
+        global d_time
+        current_time = time.time()
+        if self._last_time is None:
+            d_time = 0
+        else:
+            d_time = current_time - self._last_time
+
+        self._last_time = time.time()
+
+    def on_key_pressed(self, key):
+        if "SPACE" in key and self.in_menu == True:
+            self.set_level(0)
+
+    def load_menu(self):
+        self.clear()
+        self.in_menu = True
+        mwm.TextToken(position=(650, 300), font_size=50, color=(0, 0, 0, 255), text="Platzhalter")
+        mwm.TextToken(position=(650, 800), font_size=20, color=(0, 0, 0, 255), text="Press SPACEBAR to start")
 
     def load_room(self):
         self.clear()
+        self.in_menu = False
         self.load_gui()
         self.enemy_count = 0
         for object in self.room.content:
@@ -34,34 +52,41 @@ class MyBoard(mwm.PixelBoard):
             token.remove()
         
     def load_gui(self):
-        global coins
-        self.gui_coins = mwm.NumberToken(position=(750, 0), font_size=20, color=(0, 0, 0, 255), number = coins)
-        self.gui_health = mwm.NumberToken(position=(800, 0), font_size=20, color=(0, 0, 0, 255), number=100)
+        global coins, bombs
+        self.gui_coins = mwm.NumberToken(position=(725, 0), font_size=20, color=(0, 0, 0, 255), number=coins)
+        self.gui_bombs = mwm.NumberToken(position=(775, 0), font_size=20, color=(0, 0, 0, 255), number=bombs)
+        self.gui_health = mwm.NumberToken(position=(825, 0), font_size=20, color=(0, 0, 0, 255), number=100)
         
-    def set_room(self, room):
+    def _set_room(self, room):
         self.room = room
         self.load_room()
 
-    def inc_level(self):
-        self.level += 1
+    def _sync_room_to_level(self):
         try:
-            if self.level % 10 == 0:
-                self.set_room(boss_rooms[self.level//10])
+            if self.level != 0 and self.level % 10 == 0:
+                self._set_room(boss_rooms[self.level//10])
             else:
-                self.set_room(rooms[self.level-self.level//10])
+                self._set_room(rooms[self.level-self.level//10])
         except IndexError:
             self.win()
 
+    def set_level(self, level):
+        self.level = level
+        self._sync_room_to_level()
+
+    def inc_level(self):
+        self.level += 1
+        self._sync_room_to_level()
+
     def win(self):
         self.clear()
+        self.in_menu = True
         mwm.TextToken(position=(650, 400), font_size=50, color=(0, 0, 0, 255), text="You Win!")
-
 
     def loose(self):
         self.clear()
+        self.in_menu = True
         mwm.TextToken(position=(650, 400), font_size=50, color=(0, 0, 0, 255), text="You Loose!")
-
-
 
 
 class Room:
@@ -143,8 +168,15 @@ class Player(mwm.Actor):
         else:
             self.costume.orientation = 0
 
+    def on_key_down(self, key):
+        if "e" in key:
+            global bombs
+            if bombs > 0:
+                BombExploding((self.position[0]-60, self.position[1]-60))
+                bombs -= 1
+                my_board.gui_bombs.set_number(bombs)
+
     def act(self):
-        self.cool()   # processing passed time
         # collision (walls and borders)
         if self.sensing_token(Wall, 1) or self.sensing_borders() != []:
             self.move_back()
@@ -157,9 +189,19 @@ class Player(mwm.Actor):
             global coins
             coins += 1
             my_board.gui_coins.inc()
+        if self.sensing_token(BombItem, 1):
+            self.sensing_token(BombItem, 1).remove()
+            global bombs
+            bombs += 1
+            my_board.gui_bombs.inc()
         # leaving the room
         if self.sensing_token(Exit, 1):
             my_board.inc_level()
+
+        if self.shot_buffer > 0:
+            self.shot_buffer -= d_time
+        if self.damage_buffer > 0:
+            self.damage_buffer -= d_time
 
     def on_sensing_wall(self, wall):
         # additional collision to make glitches less common (not perfect)
@@ -174,25 +216,13 @@ class Player(mwm.Actor):
                 my_board.loose()
                 return
 
+    def on_blast(self):
+        my_board.loose()
+
     def shoot(self, direction):
         if self.shot_buffer <= 0:
             Bullet(self, direction)
             self.shot_buffer = self.shot_cool
-
-    def cool(self):
-        global d_time
-        time_2 = time.time()
-        try:
-            d_time = time_2 - self.time
-        except AttributeError:
-            d_time = 0
-
-        if self.shot_buffer > 0:
-            self.shot_buffer -= d_time
-        if self.damage_buffer > 0:
-            self.damage_buffer -= d_time
-
-        self.time = time.time()
 
 
 class Bullet(mwm.Token):
@@ -231,6 +261,9 @@ class Wall(mwm.Token):
 
     def on_setup(self):
         self.add_image("images/wall.png")
+
+    def on_blast(self):
+        self.remove()
 
 
 class DestructibleWall(Wall):
@@ -271,42 +304,84 @@ class Coin(mwm.Token):
         self.position = (self.position[0]+10, self.position[1]+10)
 
 
+class BombItem(mwm.Token):
+    def on_setup(self):
+        self.add_image("images/bomb_item.png")
+        self.size = (100, 100)
+
+
+class BombExploding(mwm.Token):
+    def on_setup(self):
+        self.add_image("images/bomb_exploding.png")
+        self.size = (100, 100)
+        self.explosion_buffer = 1.2
+
+    def act(self):
+        if self.explosion_buffer < 0:
+            Explosion((self.position[0]-150, self.position[1]-150))
+            self.remove()
+            return
+        else:
+            self.explosion_buffer -= d_time
+
+
+class Explosion(mwm.Token):
+    def on_setup(self):
+        self.add_image("images/explosion.png")
+        self.size = (300, 300)
+        self.remove_buffer = 0.15
+
+    def act(self):
+        if self.remove_buffer < 0:
+            self.remove()
+            return
+        for token in self.sensing_tokens():
+            try:
+                token.on_blast()
+            except AttributeError:
+                pass
+        self.remove_buffer -= d_time
+
 class Enemy(mwm.Token):
     def on_setup(self):
         self.add_image("images/enemy.png")
         self.size = (80, 80)
         self.hp = 100
         self.damage = 50
-        self.speed = 2
+        self.speed = 4
         self.target_position = None
+        self.move_buffer = 0
 
     def act(self):
-        #self.is_detecting_player()
-        self.move_to_player()
+        if self.sensing_token(Wall, 1) or self.sensing_borders() != []:
+            self.move_back()
+        self.target_position = my_board.player.position
+        self.move_to_target()
 
-    def move_to_player(self):
-        dx = my_board.player.position[0] - self.position[0]
-        dy = my_board.player.position[1] - self.position[1]
-        if abs(round(dx, -1)) == abs(round(dy, -1)):
-            if dx > 0 and dy > 0:
-                self.direction = 135
-            elif dx < 0 and dy < 0:
-                self.direction = -45
-            elif dy < 0 < dx:
-                self.direction = 45
-            elif dx < 0 < dy:
-                self.direction = -135
-        elif abs(dx) < abs(dy):
-            if dy < 0:
-                self.direction = 0
+    def move_to_target(self):
+        if self.target_position is not None:
+            dx = self.target_position[0] - self.position[0]
+            dy = self.target_position[1] - self.position[1]
+            if abs(round(dx, -1)) == abs(round(dy, -1)):
+                if dx > 0 and dy > 0:
+                    self.direction = 135
+                elif dx < 0 and dy < 0:
+                    self.direction = -45
+                elif dy < 0 < dx:
+                    self.direction = 45
+                elif dx < 0 < dy:
+                    self.direction = -135
+            elif abs(dx) < abs(dy):
+                if dy < 0:
+                    self.direction = 0
+                else:
+                    self.direction = 180
             else:
-                self.direction = 180
-        else:
-            if dx < 0:
-                self.direction = -90
-            else:
-                self.direction = 90
-        self.move()
+                if dx < 0:
+                    self.direction = -90
+                else:
+                    self.direction = 90
+            self.move()
 
     def on_hit(self, damage):
         self.hp -= damage
@@ -314,6 +389,10 @@ class Enemy(mwm.Token):
             self.remove()
             my_board.enemy_count -= 1
             return
+
+    def on_blast(self):
+        self.remove()
+        my_board.enemy_count -= 1
         
 
 def read_levels():
@@ -356,12 +435,13 @@ drawables = {
     "[0.0, 0.5, 0.0, 1.0]": DestructibleWall,       # RGBA(0,~127,0,255)
     "[1.0, 0.8, 0.0, 1.0]": Coin,                   # RGBA(255,~200,0,255)
     "[1.0, 0.0, 0.0, 1.0]": Enemy,                  # RGBA(255,0,0,255)
-    "[0.5, 0.5, 0.0, 1.0]": ExitLocation            # RGBA(~127,~127,0,255)
-    # "[0.0, 0.0, 0.0, 0.0]": NavTile                 # RGBA(0,0,0,0)
+    "[0.5, 0.5, 0.0, 1.0]": ExitLocation,           # RGBA(~127,~127,0,255)
+    "[0.5, 0.5, 0.5, 1.0]": BombItem                # RGBA(~127,~127,~127,255)
 }
 
 #savedata
 coins = 0
+bombs = 10
 
 read_levels()
 my_board = MyBoard(res[0], res[1])
