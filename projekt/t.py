@@ -29,15 +29,13 @@ class MyBoard(mwm.PixelBoard):
 
     def load_menu(self):
         self.clear()
-        self.play_music("sounds/music(half).wav")
+        self.play_music("sounds/music.wav")
         self.in_menu = True
         mwm.TextToken(position=(650, 300), font_size=50, color=(0, 0, 0, 255), text="Platzhalter")
         mwm.TextToken(position=(650, 800), font_size=20, color=(0, 0, 0, 255), text="Press SPACEBAR to start")
 
     def load_room(self):
         self.clear()
-        if self.room.is_boss:
-            self.play_music("sounds/music.wav")
         self.in_menu = False
         self.load_gui()
         self.enemy_count = 0
@@ -53,14 +51,14 @@ class MyBoard(mwm.PixelBoard):
     def clear(self):
         for token in self.get_tokens_at_rect((pygame.Rect(0, 0, res[0], res[1]))):
             token.remove()
-        
+
     def load_gui(self):
         global coins, bombs
         self.gui_coins = mwm.NumberToken(position=(725, 0), font_size=20, color=(0, 0, 0, 255), number=coins)
         self.gui_bombs = mwm.NumberToken(position=(775, 0), font_size=20, color=(0, 0, 0, 255), number=bombs)
         self.gui_health = mwm.NumberToken(position=(825, 0), font_size=20, color=(0, 0, 0, 255), number=100)
         self.gui_level = mwm.NumberToken(position=(875, 0), font_size=20, color=(0, 0, 0, 255), number=self.level)
-        
+
     def _set_room(self, room):
         self.room = room
         self.load_room()
@@ -68,9 +66,9 @@ class MyBoard(mwm.PixelBoard):
     def _sync_room_to_level(self):
         try:
             if self.level != 0 and self.level % 10 == 0:
-                self._set_room(boss_rooms[self.level//10-1])
+                self._set_room(boss_rooms[self.level // 10 - 1])
             else:
-                self._set_room(rooms[self.level-self.level//10])
+                self._set_room(rooms[self.level - self.level // 10])
         except IndexError:
             self.win()
 
@@ -120,13 +118,13 @@ class RoomObject:
 class Player(mwm.Actor):
     def on_setup(self):
         self.add_image("images/char.png")
-        self.speed = 5    # character move speed
-        self.hp = 100    # character hit points
-        self.shot_speed = 10    # bullet move speed
-        self.shot_cool = .5    # time between shots
-        self.damage = 50    # character damage per shot
-        self.shot_buffer = 0    # time till next shot (on setup always 0)
-        self.damage_buffer = 0    # time till able to take damage (on setup always 0)
+        self.speed = 5  # character move speed
+        self.hp = 100  # character hit points
+        self.shot_speed = 10  # bullet move speed
+        self.shot_cool = .5  # time between shots
+        self.damage = 50  # character damage per shot
+        self.shot_buffer = 0  # time till next shot (on setup always 0)
+        self.damage_buffer = 0  # time till able to take damage (on setup always 0)
         self.size = (80, 80)
 
     def on_key_pressed(self, key):
@@ -159,16 +157,16 @@ class Player(mwm.Actor):
             self.move()
         # shooting
         if "left" in key:
-            #self.costume.orientation = -self.direction - 90
+            # self.costume.orientation = -self.direction - 90
             self.shoot(-90)
         elif "right" in key:
-            #self.costume.orientation = -self.direction + 90
+            # self.costume.orientation = -self.direction + 90
             self.shoot(90)
         elif "up" in key:
-            #self.costume.orientation = -self.direction
+            # self.costume.orientation = -self.direction
             self.shoot(0)
         elif "down" in key:
-            #self.costume.orientation = -self.direction + 180
+            # self.costume.orientation = -self.direction + 180
             self.shoot(180)
         else:
             self.costume.orientation = 0
@@ -177,7 +175,7 @@ class Player(mwm.Actor):
         if "e" in key:
             global bombs
             if bombs > 0:
-                BombExploding((self.position[0]-60, self.position[1]-60))
+                BombExploding((self.position[0] - 60, self.position[1] - 60))
                 bombs -= 1
                 my_board.gui_bombs.set_number(bombs)
 
@@ -197,6 +195,7 @@ class Player(mwm.Actor):
             my_board.gui_coins.inc()
         # collecting bombs
         if self.sensing_token(BombItem, 1):
+            self.board.play_sound("sounds/collect_bomb.wav")
             self.sensing_token(BombItem, 1).remove()
             global bombs
             bombs += 1
@@ -252,11 +251,11 @@ class Bullet(mwm.Token):
         if len(self.sensing_tokens()) > 1:
             for obj in self.sensing_tokens():
                 if not isinstance(obj, Bullet) and not isinstance(obj, type(self.master)) and not isinstance(obj, Coin):
-                    try:                                                   # ^ if bullet hits
-                        obj.on_hit(self.damage)                            # -> trying to call on_hit() for target(s)
+                    try:  # ^ if bullet hits
+                        obj.on_hit(self.damage)  # -> trying to call on_hit() for target(s)
                     except AttributeError:
                         pass
-                    self.remove()                                          # -> -> removing bullet
+                    self.remove()  # -> -> removing bullet
                     return
             return
 
@@ -279,7 +278,7 @@ class DestructibleWall(Wall):
 
     def on_hit(self, damage):
         self.remove()
-        
+
 
 class ExitLocation(mwm.Token):
     def on_setup(self):
@@ -288,9 +287,9 @@ class ExitLocation(mwm.Token):
 
     def act(self):
         if my_board.enemy_count == 0:
-            Exit((self.position[0]-50, self.position[1]-50))
+            Exit((self.position[0] - 50, self.position[1] - 50))
             self.remove()
-            
+
 
 class Exit(mwm.Token):
     def on_setup(self):
@@ -302,19 +301,27 @@ class Exit(mwm.Token):
             self.direction = 90
         elif self.position[0] >= 1550:
             self.direction = -90
-        
+
 
 class Coin(mwm.Token):
     def on_setup(self):
         self.add_image("images/coin.png")
         self.size = (80, 80)
-        self.position = (self.position[0]+10, self.position[1]+10)
+        self.position = (self.position[0] + 10, self.position[1] + 10)
+
+    def on_blast(self):
+        self.remove()
 
 
 class BombItem(mwm.Token):
     def on_setup(self):
         self.add_image("images/bomb_item.png")
         self.size = (100, 100)
+
+    def on_blast(self):
+        self.board.play_sound("sounds/explosion.wav")
+        Explosion0((self.position[0] - 150, self.position[1] - 150))
+        self.remove()
 
 
 class BombExploding(mwm.Token):
@@ -326,7 +333,7 @@ class BombExploding(mwm.Token):
     def act(self):
         if self.explosion_buffer < 0:
             self.board.play_sound("sounds/explosion.wav")
-            Explosion0((self.position[0]-150, self.position[1]-150))
+            Explosion0((self.position[0] - 150, self.position[1] - 150))
             self.remove()
             return
         else:
@@ -343,7 +350,7 @@ class Explosion(mwm.Token):
     def act(self):
         if self.remove_buffer < 0:
             try:
-                self.next_exposion((self.position[0]-150, self.position[1]-150))
+                self.next_exposion((self.position[0] - 150, self.position[1] - 150))
             except TypeError:
                 pass
             self.remove()
@@ -391,7 +398,6 @@ class Explosion3(Explosion):
         self.remove_buffer = 0.5
         self.next_exposion = None
         self.damaging = False
-
 
 
 class Enemy(mwm.Token):
@@ -445,7 +451,7 @@ class Enemy(mwm.Token):
     def on_blast(self):
         self.remove()
         my_board.enemy_count -= 1
-        
+
 
 def read_levels():
     global rooms, boss_rooms
@@ -469,7 +475,7 @@ def build_levels(path, save_location):
                 for x, col in enumerate(line):
                     col = [round(x, 1) for x in list(col)]
                     try:
-                        save_location[len(save_location)-1].add_object(drawables[str(col)], [(x * tile_size[0], y * tile_size[1])])
+                        save_location[len(save_location) - 1].add_object(drawables[str(col)], [(x * tile_size[0], y * tile_size[1])])
                     except KeyError:
                         pass
 
@@ -482,16 +488,16 @@ tile_size = (100, 100)
 d_time = 0
 
 drawables = {
-    "[0.0, 0.0, 1.0, 1.0]": Player,                 # RGBA(0,0,255,255)
-    "[0.0, 0.0, 0.0, 1.0]": Wall,                   # RGBA(0,0,0,255)
-    "[0.0, 0.5, 0.0, 1.0]": DestructibleWall,       # RGBA(0,~127,0,255)
-    "[1.0, 0.8, 0.0, 1.0]": Coin,                   # RGBA(255,~200,0,255)
-    "[1.0, 0.0, 0.0, 1.0]": Enemy,                  # RGBA(255,0,0,255)
-    "[0.5, 0.5, 0.0, 1.0]": ExitLocation,           # RGBA(~127,~127,0,255)
-    "[0.5, 0.5, 0.5, 1.0]": BombItem                # RGBA(~127,~127,~127,255)
+    "[0.0, 0.0, 1.0, 1.0]": Player,  # RGBA(0,0,255,255)
+    "[0.0, 0.0, 0.0, 1.0]": Wall,  # RGBA(0,0,0,255)
+    "[0.0, 0.5, 0.0, 1.0]": DestructibleWall,  # RGBA(0,~127,0,255)
+    "[1.0, 0.8, 0.0, 1.0]": Coin,  # RGBA(255,~200,0,255)
+    "[1.0, 0.0, 0.0, 1.0]": Enemy,  # RGBA(255,0,0,255)
+    "[0.5, 0.5, 0.0, 1.0]": ExitLocation,  # RGBA(~127,~127,0,255)
+    "[0.5, 0.5, 0.5, 1.0]": BombItem  # RGBA(~127,~127,~127,255)
 }
 
-#savedata
+# savedata
 coins = 0
 bombs = 10
 
