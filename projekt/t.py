@@ -29,16 +29,24 @@ class MyBoard(mwm.PixelBoard):
 
         self._last_time = time.time()
 
-    def on_key_pressed(self, key):
+    def on_key_down(self, key):
         if "SPACE" in key and self.in_menu:
             # reseting savedata
-            global coins, bombs, health, player_speed, player_shot_cool
+            global coins, bombs, health, player_speed, player_shot_cool, player_damage, clean_run, start_time
             coins = 0
             bombs = 0
-            health = 4
+            health = 2
             player_speed = 5
             player_shot_cool = 0.5
+            player_damage = 1
+            clean_run = True
+            start_time = time.time()
             self.set_level(0)
+        if "F11" in key:
+            self.load_menu()
+        if "ESC" in key and self.in_menu:
+            raise GameExit("Let me out!")
+
 
     def load_menu(self):
         self.clear()
@@ -111,8 +119,13 @@ class MyBoard(mwm.PixelBoard):
 
     def win(self):
         self.clear()
+        run_time = time.time() - start_time
         self.in_menu = True
-        mwm.TextToken(position=(650, 400), font_size=50, color=(0, 0, 0, 255), text="You Win!")
+        mwm.TextToken(position=(650, 100), font_size=50, color=(0, 0, 0, 255), text="You Won!")
+        mwm.TextToken(position=(200, 300), font_size=25, color=(0, 0, 0, 255), text=f"{round(100000//run_time)} pints from the {run_time} seconds you took.")
+        mwm.TextToken(position=(200, 350), font_size=25, color=(0, 0, 0, 255), text=f"{coins*10} points fom the {coins} coins you had left over.")
+        mwm.TextToken(position=(200, 400), font_size=25, color=(0, 0, 0, 255), text=f"{health*10} points fom the {health} hearts you had left over.")
+        mwm.TextToken(position=(200, 450), font_size=25, color=(0, 0, 0, 255), text=f"TOTAL SCORE: {round(100000//run_time+coins*10+health*10)}")
 
     def loose(self):
         self.clear()
@@ -167,11 +180,11 @@ class GuiCoin(mwm.Token):
 class Player(mwm.Actor):
     def on_setup(self):
         self.add_image("images/char.png")
-        global player_speed, player_shot_cool
+        global player_speed, player_shot_cool, player_damage
         self.speed = player_speed  # character move speed
         self.shot_speed = 10  # bullet move speed
         self.shot_cool = player_shot_cool  # time between shots
-        self.damage = 1  # character damage per shot
+        self.damage = player_damage  # character damage per shot
         self.shot_buffer = 0  # time till next shot (on setup always 0)
         self.damage_buffer = 0  # time till able to take damage (on setup always 0)
         self.size = (80, 80)
@@ -225,6 +238,13 @@ class Player(mwm.Actor):
                 bombs -= 1
                 self.board.gui_bombs[-1].remove()
                 self.board.gui_bombs.pop(len(self.board.gui_bombs)-1)
+        elif "p" in key:
+            try:
+                self.sensing_token(Wall, 1).remove()
+                global clean_run
+                clean_run = False
+            except AttributeError:
+                pass
 
     def act(self):
         # collision (walls and borders)
@@ -260,7 +280,7 @@ class Player(mwm.Actor):
                     self.board.gui_health.pop(len(self.board.gui_health)-1)
 
     def on_blast(self):
-        self.board.loose()
+        self.on_hit(5)
 
     def shoot(self, direction):
         if self.shot_buffer <= 0:
@@ -302,7 +322,7 @@ class Bullet(mwm.Token):
 class Wall(mwm.Token):
     def __init__(self, pos):
         super().__init__(pos)
-        self.size = (tile_size[0], tile_size[1])
+        self.size = (100, 100)
 
     def on_setup(self):
         self.add_image("images/wall.png")
@@ -339,7 +359,7 @@ class Item(mwm.Token):
 
 class ExitLocation(mwm.Token):
     def on_setup(self):
-        self.size = (tile_size[0], tile_size[1])
+        self.size = (100, 100)
         self.add_image("images/empty.png")
 
     def act(self):
@@ -358,7 +378,7 @@ class ItemLocation(mwm.Token):
 
 class Exit(Item):
     def on_setup(self):
-        self.size = (tile_size[0], tile_size[1])
+        self.size = (100, 100)
         self.add_image("images/exit.png")
         # making it look nice
         if self.position[1] <= 50:
@@ -373,6 +393,7 @@ class Exit(Item):
 
     def on_blast(self):
         pass
+
 
 class Coin(Item):
     def on_setup(self):
@@ -422,7 +443,7 @@ class BombItem(Item):
         self.add_image("images/bomb_item.png")
         self.size = (100, 100)
 
-        self.price = 3
+        self.price = 2
         if self.board.in_shop():
             self.on_in_shop()
 
@@ -455,7 +476,7 @@ class BoostSpeed(Item):
         self.add_image("images/boost_speed.png")
         self.size = (80, 80)
         self.position = (self.position[0] + 10, self.position[1] + 10)
-        self.price = 4
+        self.price = 3
         if self.board.in_shop():
             self.on_in_shop()
 
@@ -485,13 +506,12 @@ class BoostFireRate(Item):
         self.add_image("images/boost_fire_rate.png")
         self.size = (80, 80)
         self.position = (self.position[0] + 10, self.position[1] + 10)
-        self.price = 4
+        self.price = 3
         if self.board.in_shop():
             self.on_in_shop()
 
     def on_touch(self):
         global coins, player_shot_cool
-        # buying speed boosts
         if self.board.in_shop():
             if coins >= self.price:
                 self.board.play_sound("sounds/collect_boost.wav")
@@ -501,11 +521,40 @@ class BoostFireRate(Item):
                 self.board.load_gui()
                 [self.gui_price[x].remove() for x in range(len(self.gui_price))]
                 self.remove()
-        # collecting speed boosts
         else:
             self.board.play_sound("sounds/collect_boost.wav")
             self.board.player.shot_cool *= 0.8
             player_shot_cool *= 0.8
+            self.board.load_gui()
+            self.remove()
+
+
+class BoostDamage(Item):
+    def on_setup(self):
+        self.add_image("images/boost_damage.png")
+        self.size = (80, 80)
+        self.position = (self.position[0] + 10, self.position[1] + 10)
+        self.price = 4
+        if self.board.in_shop():
+            self.on_in_shop()
+
+    def on_touch(self):
+        global coins, player_damage
+        # buying speed boosts
+        if self.board.in_shop():
+            if coins >= self.price:
+                self.board.play_sound("sounds/collect_boost.wav")
+                self.board.player.damage += 1
+                player_damage += 1
+                coins -= self.price
+                self.board.load_gui()
+                [self.gui_price[x].remove() for x in range(len(self.gui_price))]
+                self.remove()
+        # collecting speed boosts
+        else:
+            self.board.play_sound("sounds/collect_boost.wav")
+            self.board.player.damage += 1
+            player_damage += 1
             self.board.load_gui()
             self.remove()
 
@@ -590,8 +639,9 @@ class Enemy(mwm.Token):
     def on_setup(self):
         self.add_image("images/enemy.png")
         self.size = (80, 80)
-        self.hp = 2
-        self.damage = 1
+        self.position = (self.position[0] + 10, self.position[1] + 10)
+        self.hp = 2 + self.board.level//10
+        self.damage = 1 + self.board.level//10
         self.speed = 4
         self.target_position = None
         self.move_buffer = 0
@@ -639,6 +689,10 @@ class Enemy(mwm.Token):
         my_board.enemy_count -= 1
 
 
+class GameExit(Exception):
+    pass
+
+
 def read_levels():
     global rooms, boss_rooms, shop_rooms
     rooms = list()
@@ -668,8 +722,6 @@ def build_levels(path, save_location):
 
 
 res = (1600, 900)
-tile_count_x = 16
-tile_count_y = 9
 tile_size = (100, 100)
 
 d_time = 0
@@ -685,7 +737,7 @@ drawables = {
     "[0.5, 0.0, 0.0, 1.0]": Heart,              # RGBA(~127,0,0,255)
     "[1.0, 1.0, 1.0, 1.0]": ItemLocation        # RGBA(255,255,255,255)
 }
-buyables = [BombItem, Heart, BoostSpeed, BoostFireRate]
+buyables = [BombItem, Heart, BoostSpeed, BoostFireRate, BoostDamage]
 
 read_levels()
 my_board = MyBoard(res[0], res[1])
