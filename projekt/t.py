@@ -13,6 +13,8 @@ class MyBoard(mwm.PixelBoard):
         self.gui_health = list()
         self.gui_bombs = list()
         self.gui_coins = list()
+        self.boss_infrequency = 10
+        self.shop_infrequency = 5
 
     def act(self):
         global d_time
@@ -75,10 +77,14 @@ class MyBoard(mwm.PixelBoard):
 
     def _sync_room_to_level(self):
         try:
-            if self.level != 0 and self.level % 10 == 0:
-                self._set_room(boss_rooms[self.level // 10 - 1])
+            if self.level != 0 and self.level % self.boss_infrequency == 0:
+                self._set_room(boss_rooms[self.level // self.boss_infrequency - 1])
+
+            elif self.level != 0 and self.level % self.shop_infrequency == 0:
+                self._set_room(shop_rooms[0])
+
             else:
-                self._set_room(rooms[self.level - self.level // 10])
+                self._set_room(rooms[self.level-(self.level//self.boss_infrequency)-(self.level//self.shop_infrequency)])
         except IndexError:
             self.win()
 
@@ -100,10 +106,12 @@ class MyBoard(mwm.PixelBoard):
         self.in_menu = True
         mwm.TextToken(position=(650, 400), font_size=50, color=(0, 0, 0, 255), text="You Loose!")
 
+    def in_shop(self):
+        return self.room in shop_rooms
+
 
 class Room:
-    def __init__(self, content=None, is_boss=False):
-        self.is_boss = is_boss
+    def __init__(self, content=None):
         if content is None:
             self.content = list()
         else:
@@ -204,8 +212,8 @@ class Player(mwm.Actor):
             if bombs > 0:
                 BombExploding((self.position[0] - 60, self.position[1] - 60))
                 bombs -= 1
-                my_board.gui_bombs[-1].remove()
-                my_board.gui_bombs.pop(len(my_board.gui_bombs)-1)
+                self.board.gui_bombs[-1].remove()
+                self.board.gui_bombs.pop(len(self.board.gui_bombs)-1)
 
     def act(self):
         # collision (walls and borders)
@@ -232,7 +240,7 @@ class Player(mwm.Actor):
             health -= damage
             self.damage_buffer = 1
             if health <= 0:
-                my_board.loose()
+                self.board.loose()
                 return
             else:
                 for i in range(damage):
@@ -240,10 +248,11 @@ class Player(mwm.Actor):
                     self.board.gui_health.pop(len(self.board.gui_health)-1)
 
     def on_blast(self):
-        my_board.loose()
+        self.board.loose()
 
     def shoot(self, direction):
         if self.shot_buffer <= 0:
+            self.board.play_sound("sounds/shot.wav")
             Bullet(self, direction)
             self.shot_buffer = self.shot_cool
 
@@ -299,11 +308,19 @@ class DestructibleWall(Wall):
 
 
 class Item(mwm.Token):
+    def on_setup(self):
+        self.price = 0
+
     def on_blast(self):
         self.remove()
 
     def on_touch(self):
         pass
+
+    def on_in_shop(self):
+        if self.price > 0:
+            self.gui_price = [GuiCoin((self.position[0]-(self.price*30-20)+x*50, self.position[1]-95))
+                              for x in range(self.price)]
 
 
 class ExitLocation(mwm.Token):
@@ -354,11 +371,26 @@ class Heart(Item):
         self.size = (80, 80)
         self.position = (self.position[0] + 10, self.position[1] + 10)
 
+        self.price = 2
+        if self.board.in_shop():
+            self.on_in_shop()
+
     def on_touch(self):
-        global health
-        health += 1
-        self.board.load_gui()
-        self.remove()
+        global health, coins
+
+        if self.board.in_shop():
+            if coins > self.price:
+                self.board.play_sound("sounds/collect_heart.wav")
+                health += 1
+                coins -= self.price
+                self.board.load_gui()
+                [self.gui_price[x].remove() for x in range(len(self.gui_price))]
+                self.remove()
+        else:
+            self.board.play_sound("sounds/collect_heart.wav")
+            health += 1
+            self.board.load_gui()
+            self.remove()
 
 
 class BombItem(Item):
@@ -366,17 +398,31 @@ class BombItem(Item):
         self.add_image("images/bomb_item.png")
         self.size = (100, 100)
 
+        self.price = 3
+        if self.board.in_shop():
+            self.on_in_shop()
+
     def on_blast(self):
         self.board.play_sound("sounds/explosion.wav")
         Explosion0((self.position[0] - 150, self.position[1] - 150))
         self.remove()
 
     def on_touch(self):
-        self.board.play_sound("sounds/collect_bomb.wav")
-        global bombs
-        bombs += 1
-        self.board.load_gui()
-        self.remove()
+        global bombs, coins
+
+        if self.board.in_shop():
+            if coins > self.price:
+                self.board.play_sound("sounds/collect_bomb.wav")
+                bombs += 1
+                coins -= self.price
+                self.board.load_gui()
+                [self.gui_price[x].remove() for x in range(len(self.gui_price))]
+                self.remove()
+        else:
+            self.board.play_sound("sounds/collect_bomb.wav")
+            bombs += 1
+            self.board.load_gui()
+            self.remove()
 
 
 class BombExploding(mwm.Token):
@@ -500,23 +546,24 @@ class Enemy(mwm.Token):
         self.hp -= damage
         if self.hp <= 0:
             self.remove()
-            self.board.enemy_count -= 1
+            my_board.enemy_count -= 1
             return
 
     def on_blast(self):
         self.remove()
-        self.board.enemy_count -= 1
+        my_board.enemy_count -= 1
 
 
 def read_levels():
-    global rooms, boss_rooms
+    global rooms, boss_rooms, shop_rooms
     rooms = list()
-    path = "maps"
-    build_levels(path, rooms)
+    build_levels("maps", rooms)
 
     boss_rooms = list()
-    path = "maps/boss"
-    build_levels(path, boss_rooms)
+    build_levels("maps/boss", boss_rooms)
+
+    shop_rooms = list()
+    build_levels("maps/shop", shop_rooms)
 
 
 def build_levels(path, save_location):
@@ -524,7 +571,7 @@ def build_levels(path, save_location):
     folder.sort()
     for file in folder:
         if file.endswith(".png"):
-            save_location.append(Room(is_boss=(path == "maps/boss")))
+            save_location.append(Room())
             data = image.imread(f"{path}/{file}")
             for y, line in enumerate(data):
                 for x, col in enumerate(line):
