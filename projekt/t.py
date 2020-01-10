@@ -15,7 +15,6 @@ class MyBoard(mwm.PixelBoard):
         self.gui_bombs = list()
         self.gui_coins = list()
         # defining how frequent special rooms appear (every n-th room counting from 0)
-        self.boss_infrequency = 10
         self.shop_infrequency = 5
 
     def act(self):
@@ -45,14 +44,16 @@ class MyBoard(mwm.PixelBoard):
         if "F11" in key:
             self.load_menu()
         if "ESC" in key and self.in_menu:
-            raise GameExit("Let me out!")
+            raise GameExit("Lass mich hier raus!")
 
 
     def load_menu(self):
         self.clear()
         self.play_music("sounds/music.wav")
         self.in_menu = True
-        mwm.TextToken(position=(650, 300), font_size=50, color=(0, 0, 0, 255), text="Platzhalter")
+        mwm.TextToken(position=(310, 300), font_size=30, color=(0, 0, 0, 255), text="Das")
+        mwm.TextToken(position=(300, 300), font_size=150, color=(0, 0, 0, 255), text="Dark Souls")
+        mwm.TextToken(position=(460, 430), font_size=30, color=(0, 0, 0, 255), text="unter den schlechten Schulprojektspielen")
         mwm.TextToken(position=(650, 800), font_size=20, color=(0, 0, 0, 255), text="Press SPACEBAR to start")
 
     def load_room(self):
@@ -95,15 +96,11 @@ class MyBoard(mwm.PixelBoard):
     def _sync_room_to_level(self):
         try:
             # determining which type of room needs to be loaded
-            if self.level != 0 and self.level % self.boss_infrequency == 0:
-                self._set_room(boss_rooms[self.level // self.boss_infrequency - 1])
-
-            elif self.level != 0 and self.level % self.shop_infrequency == 0:
+            if self.level != 0 and self.level % self.shop_infrequency == 0:
                 self._set_room(shop_rooms[0])
 
             else:
-
-                self._set_room(rooms[self.level-(self.level//self.boss_infrequency)-(self.level//self.shop_infrequency)])
+                self._set_room(rooms[self.level-(self.level//self.shop_infrequency)])
                 # ^^ making sure no level gets skipped, because a special one was loaded instead ^^
         except IndexError:
             # no levels remain -> you win
@@ -122,10 +119,13 @@ class MyBoard(mwm.PixelBoard):
         run_time = time.time() - start_time
         self.in_menu = True
         mwm.TextToken(position=(650, 100), font_size=50, color=(0, 0, 0, 255), text="You Won!")
-        mwm.TextToken(position=(200, 300), font_size=25, color=(0, 0, 0, 255), text=f"{round(100000//run_time)} pints from the {run_time} seconds you took.")
+        mwm.TextToken(position=(200, 300), font_size=25, color=(0, 0, 0, 255), text=f"{round(100000//run_time)} points from the {run_time} seconds you took.")
         mwm.TextToken(position=(200, 350), font_size=25, color=(0, 0, 0, 255), text=f"{coins*10} points fom the {coins} coins you had left over.")
         mwm.TextToken(position=(200, 400), font_size=25, color=(0, 0, 0, 255), text=f"{health*10} points fom the {health} hearts you had left over.")
-        mwm.TextToken(position=(200, 450), font_size=25, color=(0, 0, 0, 255), text=f"TOTAL SCORE: {round(100000//run_time+coins*10+health*10)}")
+        if clean_run:
+            mwm.TextToken(position=(200, 450), font_size=25, color=(0, 0, 0, 255), text=f"TOTAL SCORE: {round(100000//run_time+coins*10+health*10)}")
+        else:
+            mwm.TextToken(position=(200, 450), font_size=25, color=(0, 0, 0, 255), text=f"TOTAL ILLEGITIMATE SCORE: {round(100000//run_time+coins*10+health*10)}")
 
     def loose(self):
         self.clear()
@@ -188,6 +188,7 @@ class Player(mwm.Actor):
         self.shot_buffer = 0  # time till next shot (on setup always 0)
         self.damage_buffer = 0  # time till able to take damage (on setup always 0)
         self.size = (80, 80)
+        self.position = (self.position[0] + 10, self.position[1] + 10)
 
     def on_key_pressed(self, key):
         # movement
@@ -253,6 +254,9 @@ class Player(mwm.Actor):
         # taking damage from enemies
         if self.sensing_token(Enemy, 1):
             self.on_hit(self.sensing_token(Enemy, 1).damage)
+        # taking damage from spikes
+        if self.sensing_token(Spikes, 1):
+            self.on_hit(1)
         # interacting with items
         for token in self.sensing_tokens(Item, 1):
             token.on_touch()
@@ -269,6 +273,7 @@ class Player(mwm.Actor):
     def on_hit(self, damage):
         global health
         if self.damage_buffer <= 0:
+            self.board.play_sound("sounds/player_damaged.wav")
             health -= damage
             self.damage_buffer = 1
             if health <= 0:
@@ -339,6 +344,14 @@ class DestructibleWall(Wall):
         self.board.play_sound("sounds/wall_break.wav")
         self.remove()
 
+
+class Spikes(mwm.Token):
+    def on_setup(self):
+        self.add_image("images/spikes.png")
+        self.size = (100, 100)
+
+    def on_blast(self):
+        self.remove()
 
 class Item(mwm.Token):
     # parent class, not meant to be instanced
@@ -678,6 +691,7 @@ class Enemy(mwm.Token):
             self.move()
 
     def on_hit(self, damage):
+        self.board.play_sound("sounds/enemy_damaged.wav")
         self.hp -= damage
         if self.hp <= 0:
             self.remove()
@@ -694,12 +708,9 @@ class GameExit(Exception):
 
 
 def read_levels():
-    global rooms, boss_rooms, shop_rooms
+    global rooms, shop_rooms
     rooms = list()
     build_levels("maps", rooms)
-
-    boss_rooms = list()
-    build_levels("maps/boss", boss_rooms)
 
     shop_rooms = list()
     build_levels("maps/shop", shop_rooms)
@@ -735,7 +746,8 @@ drawables = {
     "[0.5, 0.5, 0.0, 1.0]": ExitLocation,       # RGBA(~127,~127,0,255)
     "[0.5, 0.5, 0.5, 1.0]": BombItem,           # RGBA(~127,~127,~127,255)
     "[0.5, 0.0, 0.0, 1.0]": Heart,              # RGBA(~127,0,0,255)
-    "[1.0, 1.0, 1.0, 1.0]": ItemLocation        # RGBA(255,255,255,255)
+    "[1.0, 1.0, 1.0, 1.0]": ItemLocation,       # RGBA(255,255,255,255)
+    "[1.0, 0.5, 0.0, 1.0]": Spikes             # RGBA(255,~127,0,255)
 }
 buyables = [BombItem, Heart, BoostSpeed, BoostFireRate, BoostDamage]
 
